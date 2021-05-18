@@ -1,0 +1,14 @@
+FUNCTION-POOL zfinfi036.                    "MESSAGE-ID ..
+
+* INCLUDE LZFINFI036D...                     " Local class definition
+
+*DATA: tl_cp_data TYPE TABLE OF bdi_chptr.
+
+"ini-RDM56856
+DATA: v_task   TYPE char8,
+      r_czterm TYPE RANGE OF dzterm.
+*      v_status TYPE char1,
+*      v_ativo  TYPE active_fl.                              "RDM56856
+
+CONSTANTS: v_funcname TYPE rs38l-name VALUE 'ZFINFI038'.
+"fim-RDM56856

@@ -1,0 +1,151 @@
+FUNCTION zfinfi043.
+*"----------------------------------------------------------------------
+*"*"Update Function Module:
+*"
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(I_KNA1) TYPE  KNA1
+*"     VALUE(I_KNB1) TYPE  KNB1
+*"     VALUE(I_KNVV) TYPE  KNVV
+*"     VALUE(I_UPD) TYPE  ZDTUPD
+*"     VALUE(I_BACK) TYPE  CHAR1 OPTIONAL
+*"----------------------------------------------------------------------
+
+  SELECT * FROM knb1
+   WHERE kunnr = @i_knb1-kunnr
+    INTO TABLE @DATA(tl_knb1).
+
+  SELECT * FROM knvv
+    WHERE kunnr = @i_knvv-kunnr
+     INTO TABLE @DATA(tl_knvv).
+
+  IF i_upd = c_b1 OR i_upd = c_al.
+    LOOP AT tl_knb1 INTO DATA(el_knb1)
+      WHERE intad <> i_knb1-intad.
+
+      el_knb1-intad = i_knb1-intad.
+      zcl_zfinfi043=>m_costumer_upd( EXPORTING i_kna1 = i_kna1
+                                               i_knb1 = el_knb1 ).
+
+    ENDLOOP.
+  ENDIF.
+
+  IF i_upd = c_vv OR i_upd = c_al.
+    LOOP AT tl_knvv INTO DATA(el_knvv)
+      WHERE zterm <> i_knvv-zterm.
+
+      el_knvv-zterm = i_knvv-zterm.
+      zcl_zfinfi043=>m_costumer_upd( EXPORTING i_kna1 = i_kna1
+                                               i_knvv = el_knvv ).
+
+      DATA(vl_exec) = abap_true.
+
+    ENDLOOP.
+  ENDIF.
+
+  IF NOT vl_exec IS INITIAL.
+
+    zcl_zfinfi043=>m_credit_management(
+      EXPORTING i_kunnr = i_kna1-kunnr
+                i_back  = i_back ).
+
+  ENDIF.
+
+ENDFUNCTION.
+
+"=====================Class Imp=========================================
+CLASS zcl_zfinfi043 IMPLEMENTATION.
+
+  METHOD m_costumer_upd.
+
+    CALL FUNCTION 'SD_CUSTOMER_MAINTAIN_ALL'
+      EXPORTING
+        i_kna1                  = i_kna1
+        i_knb1                  = i_knb1
+        i_knvv                  = i_knvv
+      EXCEPTIONS
+        client_error            = 1
+        kna1_incomplete         = 2
+        knb1_incomplete         = 3
+        knb5_incomplete         = 4
+        knvv_incomplete         = 5
+        kunnr_not_unique        = 6
+        sales_area_not_unique   = 7
+        sales_area_not_valid    = 8
+        insert_update_conflict  = 9
+        number_assignment_error = 10
+        number_not_in_range     = 11
+        number_range_not_extern = 12
+        number_range_not_intern = 13
+        account_group_not_valid = 14
+        parnr_invalid           = 15
+        bank_address_invalid    = 16
+        tax_data_not_valid      = 17
+        no_authority            = 18
+        company_code_not_unique = 19
+        dunning_data_not_valid  = 20
+        knb1_reference_invalid  = 21
+        cam_error               = 22
+        OTHERS                  = 23.
+
+  ENDMETHOD.
+
+  METHOD m_credit_management.
+    "====================Declaration===================================
+    CONSTANTS: cl_900  TYPE ctlpc_cm  VALUE '900',
+               cl_801  TYPE ctlpc_cm  VALUE '801',
+               cl_emb1 TYPE kkber     VALUE 'EMB1',
+               cl_u    TYPE cdchngind VALUE 'U'.
+
+    DATA: el_xf02c   TYPE xf02c.
+    "======================Fim=========================================
+
+    SELECT SINGLE * FROM knka
+     WHERE kunnr = @i_kunnr
+      INTO @DATA(el_knka).
+
+    DATA(el_knka_old) = el_knka.
+    el_xf02c-t014waers = el_knka-waers.
+
+    SELECT SINGLE * FROM knkk
+      WHERE kunnr = @i_kunnr
+        AND kkber = @cl_emb1
+       INTO @DATA(el_knkk).
+
+    CHECK sy-subrc IS INITIAL.
+
+    DATA(el_knkk_old) = el_knkk.
+
+    el_knkk-ctlpc = COND #( WHEN i_back IS INITIAL
+                            THEN cl_900
+                            ELSE cl_801 ).
+
+    CHECK el_knkk-ctlpc <> el_knkk_old-ctlpc.
+
+    CALL FUNCTION 'CREDITLIMIT_CHANGE'
+      EXPORTING
+        i_knka   = el_knka
+        i_knkk   = el_knkk
+        upd_knka = ''
+        upd_knkk = cl_u
+        yknka    = el_knka_old
+        yknkk    = el_knkk_old.
+
+    CALL FUNCTION 'KLIM_WRITE_DOCUMENT'
+      EXPORTING
+        objectid = CONV cdobjectv( i_kunnr )
+        tcode    = sy-tcode
+        utime    = sy-uzeit
+        udate    = sy-datum
+        username = sy-uname
+        n_knka   = el_knka
+        o_yknka  = el_knka_old
+        n_knkk   = el_knkk
+        o_yknkk  = el_knkk_old
+        n_xf02c  = el_xf02c
+        o_xf02c  = el_xf02c
+        upd_knkk = cl_u.
+
+  ENDMETHOD.
+
+ENDCLASS.
