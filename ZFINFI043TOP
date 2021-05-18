@@ -1,0 +1,19 @@
+FUNCTION-POOL zfinfi043.                    "MESSAGE-ID ..
+
+* INCLUDE LZFINFI043D...                     " Local class definition
+
+CONSTANTS: c_b1   TYPE zdtupd   VALUE 'B1',
+           c_vv   TYPE zdtupd   VALUE 'VV',
+           c_al   TYPE zdtupd   VALUE 'AL'.
+
+***===============Class==============================================
+CLASS zcl_zfinfi043 DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      m_costumer_upd IMPORTING i_kna1 TYPE kna1
+                               i_knb1 TYPE knb1 OPTIONAL
+                               i_knvv TYPE knvv OPTIONAL,
+
+      m_credit_management IMPORTING i_kunnr TYPE kunnr
+                                    i_back  TYPE char1.
+ENDCLASS.

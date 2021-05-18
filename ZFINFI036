@@ -1,0 +1,189 @@
+FUNCTION zfinfi036.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(I_KNA1) LIKE  KNA1 STRUCTURE  KNA1
+*"     VALUE(I_KNB1) LIKE  KNB1 STRUCTURE  KNB1
+*"     VALUE(I_KNA1_OLD) LIKE  KNA1 STRUCTURE  KNA1
+*"     VALUE(I_KNB1_OLD) LIKE  KNB1 STRUCTURE  KNB1
+*"     VALUE(I_KNVV) LIKE  KNVV STRUCTURE  KNVV
+*"  TABLES
+*"      T_XKNBK STRUCTURE  FKNBK
+*"      T_XKNB5 STRUCTURE  FKNB5
+*"      T_YKNBK STRUCTURE  FKNBK
+*"      T_YKNB5 STRUCTURE  FKNB5
+*"      T_XKNZA STRUCTURE  FKNZA
+*"      T_YKNZA STRUCTURE  FKNZA
+*"      T_XKNAS STRUCTURE  FKNAS OPTIONAL
+*"      T_YKNAS STRUCTURE  FKNAS OPTIONAL
+*"      T_XKNEX STRUCTURE  FKNEX OPTIONAL
+*"      T_YKNEX STRUCTURE  FKNEX OPTIONAL
+*"      T_XKNVA STRUCTURE  FKNVA OPTIONAL
+*"      T_YKNVA STRUCTURE  FKNVA OPTIONAL
+*"      T_XKNVD STRUCTURE  FKNVD OPTIONAL
+*"      T_YKNVD STRUCTURE  FKNVD OPTIONAL
+*"      T_XKNVI STRUCTURE  FKNVI OPTIONAL
+*"      T_YKNVI STRUCTURE  FKNVI OPTIONAL
+*"      T_XKNVK STRUCTURE  FKNVK OPTIONAL
+*"      T_YKNVK STRUCTURE  FKNVK OPTIONAL
+*"      T_XKNVL STRUCTURE  FKNVL OPTIONAL
+*"      T_YKNVL STRUCTURE  FKNVL OPTIONAL
+*"      T_XKNVP STRUCTURE  FKNVP OPTIONAL
+*"      T_YKNVP STRUCTURE  FKNVP OPTIONAL
+*"      T_XKNAT STRUCTURE  FKNAT OPTIONAL
+*"      T_XKNBW STRUCTURE  FKNBW OPTIONAL
+*"      T_YKNAT STRUCTURE  FKNAT OPTIONAL
+*"      T_YKNBW STRUCTURE  FKNBW OPTIONAL
+*"----------------------------------------------------------------------
+
+  IF sy-tcode EQ 'XD02'
+    OR sy-tcode EQ 'FD02'
+    OR sy-tcode EQ 'VD02'.
+
+    IF NOT i_knvv IS INITIAL.
+      SELECT SINGLE aufsd,
+                    faksd,
+                    lifsd,
+                    cassd,
+                    zterm
+        INTO @DATA(el_knvv_old)
+        FROM knvv
+          WHERE kunnr EQ @i_knvv-kunnr
+            AND vkorg EQ @i_knvv-vkorg
+            AND vtweg EQ @i_knvv-vtweg
+            AND spart EQ @i_knvv-spart.
+    ENDIF.
+
+
+    IF i_kna1-konzs NE i_kna1_old-konzs
+    OR i_kna1-rpmkr NE i_kna1_old-rpmkr
+    OR i_kna1-vbund NE i_kna1_old-vbund                     "RDM56010
+    "ini - RDM67805 - fnery
+    OR i_kna1-aufsd NE i_kna1_old-aufsd
+    OR i_kna1-faksd NE i_kna1_old-faksd
+    OR i_kna1-lifsd NE i_kna1_old-lifsd
+    OR i_kna1-sperr NE i_kna1_old-sperr
+    OR i_kna1-cassd NE i_kna1_old-cassd
+    OR i_knvv-aufsd NE el_knvv_old-aufsd
+    OR i_knvv-faksd NE el_knvv_old-faksd
+    OR i_knvv-lifsd NE el_knvv_old-lifsd
+    OR i_knvv-cassd NE el_knvv_old-cassd
+    OR i_knb1-sperr NE i_knb1_old-sperr
+    OR i_knb1-intad NE i_knb1_old-intad
+    OR i_knb1-vzskz NE i_knb1_old-vzskz.
+      "fim - RDM67805 - fnery
+
+      "ini - RDM72193 - fnery
+      v_task = i_kna1-kunnr+2(8).
+      CALL FUNCTION 'ZFINFI043_CHANGE_POINTERS' STARTING NEW TASK v_task
+        EXPORTING
+          i_kunnr = i_kna1-kunnr.
+      "fim - RDM72193 - fnery
+
+    ENDIF.
+
+    IF i_knvv-zterm <> el_knvv_old-zterm.
+      CALL FUNCTION 'ZGENCA001_RANGES'
+        EXPORTING
+          i_code          = 'ZFINFI036'
+          i_const         = 'CZTERM'
+        TABLES
+          ranges          = r_czterm
+        EXCEPTIONS
+          const_not_found = 1
+          wrong_selection = 2
+          OTHERS          = 3.
+
+      IF i_knvv-zterm IN r_czterm.
+        DATA(vl_call) = abap_true.
+        DATA(vl_upd)  = 'VV'.
+
+      ELSEIF el_knvv_old-zterm IN r_czterm.
+        DATA(vl_back) = abap_true.
+        vl_call = abap_true.
+        vl_upd  = 'VV'.
+
+      ENDIF.
+    ENDIF.
+
+    "INI-RDM57529
+*    IF NOT v_ativo IS INITIAL.
+*
+*      "ini-RDM56856
+*      CLEAR: v_status, v_task.
+*      IF i_kna1-zzzclasc EQ 1 AND i_kna1_old-zzzclasc IS INITIAL
+*         AND i_kna1-zzzdatc GT sy-datum.
+*        v_status = 'B'.
+*      ELSEIF i_kna1-zzzclasc IS INITIAL AND i_kna1_old-zzzclasc EQ 1.
+*        v_status = 'U'.
+*      ENDIF.
+*
+*      IF NOT v_status IS INITIAL.
+*
+*        CALL FUNCTION 'FUNCTION_EXISTS'
+*          EXPORTING
+*            funcname           = v_funcname
+*          EXCEPTIONS
+*            function_not_exist = 1
+*            OTHERS             = 2.
+*
+*        IF sy-subrc IS INITIAL.
+*
+*          v_task = i_kna1-kunnr+2(8).
+*          CALL FUNCTION 'ZFINFI038' STARTING NEW TASK v_task
+*            EXPORTING
+*              i_tipo   = 'C'
+*              i_kunnr  = i_kna1-kunnr
+*              i_name1  = i_kna1-name1
+*              i_status = v_status.
+*
+*        ENDIF.
+*      ENDIF.
+*      "fim-RDM56856
+*    ENDIF.
+    "FIM-RDM57529
+  ENDIF.
+
+  "inicio - RDM67805 - fnery
+  "Equaliza campo Knb1-intad em todas Empresas
+  CASE sy-tcode.
+    WHEN 'XD01'.
+      IF i_knb1-intad IS INITIAL.
+        SELECT SINGLE intad FROM knb1
+          INTO @DATA(vl_intad)
+           WHERE kunnr EQ @i_knb1-kunnr
+             AND bukrs NE @i_knb1-bukrs
+             AND intad IS NOT NULL.
+
+        IF sy-subrc IS INITIAL.
+          i_knb1-intad = vl_intad.
+          vl_call = abap_true.
+        ENDIF.
+
+      ELSEIF i_knb1-intad NE i_knb1_old-intad.
+        vl_call = abap_true.
+      ENDIF.
+
+      vl_upd = 'B1'.
+
+    WHEN 'XD02' OR 'FD02' OR 'VD02'.
+      IF i_knb1-intad NE i_knb1_old-intad.
+        vl_call = abap_true.
+        vl_upd  = COND zdtupd( WHEN vl_upd = 'VV'
+                               THEN 'AL'
+                               ELSE 'B1' ).
+      ENDIF.
+  ENDCASE.
+
+  IF vl_call EQ abap_true.
+    CALL FUNCTION 'ZFINFI043' IN UPDATE TASK
+      EXPORTING
+        i_kna1 = i_kna1
+        i_knb1 = i_knb1
+        i_knvv = i_knvv
+        i_upd  = vl_upd
+        i_back = vl_back.
+  ENDIF.
+  "fim - RDM67805 - fnery
+
+ENDFUNCTION.
