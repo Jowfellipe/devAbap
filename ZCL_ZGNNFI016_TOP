@@ -1,0 +1,28 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZCL_ZGNNFI016_TOP
+*&---------------------------------------------------------------------*
+
+TYPES: BEGIN OF tyl_process,
+         process TYPE sy-tabix,
+         t_olp   TYPE zfitfiportal,
+       END OF tyl_process,
+       ttl_process TYPE STANDARD TABLE OF tyl_process,
+
+       BEGIN OF tyl_card,
+         bukrs   TYPE ztfi_portal_card-bukrs,
+         docnum  TYPE ztfi_portal_card-docnum,
+         gjahr   TYPE ztfi_portal_card-gjahr,
+         kunnr   TYPE ztfi_portal_card-kunnr,
+         buzei   TYPE ztfi_portal_card-buzei,
+         znumtra TYPE ztfi_portal_card-znumtra,
+         datpag  TYPE ztfi_portal_card-datpag,
+         zcputm  TYPE ztfi_portal_card-zcputm,
+       END OF tyl_card,
+       ttl_card TYPE SORTED TABLE OF tyl_card WITH NON-UNIQUE KEY bukrs docnum gjahr kunnr buzei.
+
+DATA: tl_process TYPE ttl_process,
+      tl_card    TYPE ttl_card,
+      tl_olp_aux TYPE ttl_card,
+      el_process TYPE tyl_process,
+      vl_process TYPE sy-tabix,
+      vl_tabix   TYPE sy-tabix.
