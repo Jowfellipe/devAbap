@@ -1,0 +1,336 @@
+class ZCL_ZGNNFI016 definition
+  public
+  final
+  create public .
+
+public section.
+
+  class-data T_OLP type ZFITFIPORTAL .
+  class-data E_OLP type ZFISFIPORTAL_OLP .
+  class-data E_WEB type ZFISFIRABBITMQ .
+  constants C_C type CHAR1 value 'C' ##NO_TEXT.
+  constants C_CREDIT type CHAR6 value 'CREDIT' ##NO_TEXT.
+  constants C_DEBIT type CHAR5 value 'DEBIT' ##NO_TEXT.
+  constants C_TRUE type CHAR4 value 'true' ##NO_TEXT.
+  constants C_FALSE type CHAR5 value 'false' ##NO_TEXT.
+  constants C_OPEN type CHAR4 value 'OPEN' ##NO_TEXT.
+  constants C_CLOSED type CHAR6 value 'CLOSED' ##NO_TEXT.
+  constants C_REVERSED type CHAR8 value 'REVERSED' ##NO_TEXT.
+  constants C_001 type CHAR3 value '001' ##NO_TEXT.
+  constants C_001_001 type CHAR7 value '001/001' ##NO_TEXT.
+  constants C_DOCUMENT type CHAR8 value 'document' ##NO_TEXT.
+  constants C_BASE64 type CHAR6 value 'base64' ##NO_TEXT.
+  class-data V_PI type RFCDES-RFCDEST .
+  constants C_CREDITCARD type CHAR10 value 'creditCard' ##NO_TEXT.
+  constants C_CUSTOMER type CHAR8 value 'customer' ##NO_TEXT.
+  constants C_RESPONSIBLE type CHAR22 value 'customerAccountManager' ##NO_TEXT.
+
+  class-methods MONTAR_DADOS
+    importing
+      !IT_PORTAL_OLP type ZFITFIPORTAL_OLP
+      !IT_OLP_CARD type ZFITFIOLP_CARD optional
+      !IT_PDF type ZFITFIPDF optional
+    exceptions
+      NOT_FOUND .
+  class-methods ENV_CADOP_OLP
+    importing
+      !ET_CADOP_OLP type ZFITCADOPOLP .
+  class-methods ENV_RESPONSIBLE_OLP
+    importing
+      !IT_RESP type ZFITRESPONSIBLE .
+  PROTECTED SECTION.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCL_ZGNNFI016 IMPLEMENTATION.
+
+
+  METHOD env_cadop_olp.
+
+    DATA(ol_json) = cl_sxml_string_writer=>create( type = if_sxml=>co_xt_json ).
+
+    CALL TRANSFORMATION zgntfi021
+        SOURCE operadoras = et_cadop_olp[]
+        RESULT XML ol_json.
+
+    DATA(vl_json) = ol_json->get_output( ).
+
+    CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+      EXPORTING
+        input  = vl_json
+      IMPORTING
+        output = e_web-payload.
+
+    e_web-type             = c_creditcard.
+    e_web-payload_encoding = c_base64.
+
+    CALL FUNCTION 'ZGENCA010'
+      EXPORTING
+        i_tipo_con = 'R'
+      IMPORTING
+        r_rfcdest  = v_pi
+      EXCEPTIONS
+        not_found  = 1
+        OTHERS     = 2.
+
+    IF sy-subrc IS INITIAL.
+
+      CALL FUNCTION 'ZGNNFI016N' IN BACKGROUND TASK
+        DESTINATION v_pi
+        EXPORTING
+          i_web = e_web.
+
+      COMMIT WORK.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD env_responsible_olp.
+
+    DATA(ol_json) = cl_sxml_string_writer=>create( type = if_sxml=>co_xt_json ).
+
+    CALL TRANSFORMATION zfitfi056
+        SOURCE responsible = it_resp[]
+        RESULT XML ol_json.
+
+    DATA(vl_json) = ol_json->get_output( ).
+
+    CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+      EXPORTING
+        input  = vl_json
+      IMPORTING
+        output = e_web-payload.
+
+    e_web-type             = c_responsible.
+    e_web-payload_encoding = c_base64.
+
+    CALL FUNCTION 'ZGENCA010'
+      EXPORTING
+        i_tipo_con = 'R'
+      IMPORTING
+        r_rfcdest  = v_pi
+      EXCEPTIONS
+        not_found  = 1
+        OTHERS     = 2.
+
+    IF sy-subrc IS INITIAL.
+
+      CALL FUNCTION 'ZGNNFI016N' IN BACKGROUND TASK
+        DESTINATION v_pi
+        EXPORTING
+          i_web = e_web.
+
+      COMMIT WORK.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD montar_dados.
+    INCLUDE zcl_zgnnfi016_top.
+
+    IF it_olp_card[] IS INITIAL.
+
+      DATA(tl_olp_aux1) = VALUE ttl_card( FOR el_aux1 IN it_portal_olp
+          ( bukrs  = el_aux1-bukrs
+            docnum = CONV docnum( el_aux1-belnr )
+            gjahr  = el_aux1-gjahr
+            buzei  = el_aux1-buzei
+            kunnr  = el_aux1-kunnr ) ).
+      INSERT LINES OF tl_olp_aux1 INTO TABLE tl_olp_aux.
+
+      DATA(tl_olp_aux2) = VALUE ttl_card( FOR el_aux2 IN it_portal_olp
+          WHERE ( bstnk(3) = 'SVQ' )
+          ( bukrs  = el_aux2-bukrs
+            docnum = CONV docnum( el_aux2-bstnk )
+            gjahr  = el_aux2-gjahr
+            buzei  = el_aux2-buzei
+            kunnr  = el_aux2-kunnr ) ).
+      INSERT LINES OF tl_olp_aux2 INTO TABLE tl_olp_aux.
+
+      IF NOT tl_olp_aux[] IS INITIAL.
+        SELECT bukrs,
+               docnum,
+               gjahr,
+               kunnr,
+               buzei,
+               znumtra,
+               datpag,
+               zcputm
+          FROM ztfi_portal_card
+          INTO TABLE @tl_card
+          FOR ALL ENTRIES IN @tl_olp_aux
+          WHERE bukrs  EQ @tl_olp_aux-bukrs
+            AND docnum EQ @tl_olp_aux-docnum
+            AND gjahr  EQ @tl_olp_aux-gjahr
+            AND kunnr  EQ @tl_olp_aux-kunnr
+            AND buzei  EQ @tl_olp_aux-buzei.
+
+        REFRESH: tl_olp_aux, tl_olp_aux1, tl_olp_aux2.
+      ENDIF.
+    ELSE.
+      tl_card = CORRESPONDING #( it_olp_card[] ).
+    ENDIF.
+
+    LOOP AT it_portal_olp INTO DATA(el_portal).
+      vl_tabix =  vl_tabix + 1.
+      CLEAR e_olp.
+
+      e_olp-salesorganization     = el_portal-bukrs.
+      e_olp-distributionchannel   = el_portal-vtweg.
+      e_olp-division              = el_portal-spart.
+      e_olp-tradingpartner        = el_portal-vbund.
+      e_olp-customercode          = el_portal-kunnr.
+      e_olp-customername          = el_portal-zname.
+      e_olp-timestamp             = el_portal-zcpudt && el_portal-zcputm.
+
+      e_olp-chargetype            = COND #( WHEN el_portal-zdebcred = c_c THEN c_credit
+                                          ELSE c_debit ).
+
+      e_olp-isdispute              = COND #( WHEN el_portal-zdisput = abap_true THEN c_true
+                                             ELSE c_false ).
+
+      e_olp-status                 = SWITCH #( el_portal-zreg_type
+                                            WHEN 4 THEN c_open
+                                            WHEN 5 OR 6 THEN c_closed
+                                            WHEN 8 OR 7 THEN c_reversed ).
+
+      e_olp-installment            = COND #( WHEN el_portal-zparcel IS INITIAL THEN c_001
+                                             ELSE el_portal-zparcel(3) ).
+
+      e_olp-installmentdescription = COND #( WHEN el_portal-zparcel IS INITIAL THEN c_001_001
+                                             ELSE el_portal-zparcel ).
+
+      e_olp-fiscalyear             = el_portal-gjahr.
+      e_olp-issueddate             = el_portal-bldat.
+      e_olp-duedate                = el_portal-dvecto.
+      e_olp-issuedcurrency         = el_portal-waers.
+      e_olp-totalamount            = el_portal-wrbtr.
+      e_olp-purchaseordernumber    = el_portal-bstnk.
+      e_olp-lineitem               = el_portal-buzei.
+      e_olp-number                 = el_portal-belnr.
+      e_olp-billingnumber          = |{ el_portal-vbeln ALPHA = IN }|.
+      e_olp-assignmentnumber       = el_portal-zuonr.
+      e_olp-referencenumber        = el_portal-xblnr.
+      e_olp-fiscalnumber           = el_portal-numnf.
+      e_olp-clearingnumber         = el_portal-augbl.
+      e_olp-clearingdate           = el_portal-augdt.
+      e_olp-paymentblockcode       = el_portal-zlspr.
+      e_olp-specialreasoncode      = el_portal-umskz.
+      e_olp-type                   = el_portal-blart.
+      e_olp-statuscode             = el_portal-zreg_type.
+      e_olp-irftype1               = el_portal-taxtyp01.
+      e_olp-irfvalue1              = el_portal-taxval01.
+      e_olp-irftype2               = el_portal-taxtyp02.
+      e_olp-irfvalue2              = el_portal-taxval02.
+      e_olp-irftype3               = el_portal-taxtyp03.
+      e_olp-irfvalue3              = el_portal-taxval03.
+      e_olp-irftype4               = el_portal-taxtyp04.
+      e_olp-irfvalue4              = el_portal-taxval04.
+      e_olp-irftype5               = el_portal-taxtyp05.
+      e_olp-irfvalue5              = el_portal-taxval05.
+      e_olp-irftype6               = el_portal-taxtyp06.
+      e_olp-irfvalue6              = el_portal-taxval06.
+      e_olp-irftype7               = el_portal-taxtyp07.
+      e_olp-irfvalue7              = el_portal-taxval07.
+      e_olp-irftype8               = el_portal-taxtyp08.
+      e_olp-irfvalue8              = el_portal-taxval08.
+      e_olp-irftype9               = el_portal-taxtyp09.
+      e_olp-irfvalue9              = el_portal-taxval09.
+      e_olp-irftype10              = el_portal-taxtyp10.
+      e_olp-irfvalue10             = el_portal-taxval10.
+      e_olp-liquidamount           = el_portal-zliq_amount.
+      e_olp-cessioncode            = el_portal-cession_kz.
+      e_olp-servicetype            = el_portal-stype.
+
+      READ TABLE tl_card INTO DATA(el_card)
+          WITH TABLE KEY bukrs  = el_portal-bukrs
+                         docnum = el_portal-belnr
+                         gjahr  = el_portal-gjahr
+                         buzei  = el_portal-buzei
+                         kunnr  = el_portal-kunnr.
+      IF sy-subrc IS INITIAL.
+        e_olp-transactionnumber = el_card-znumtra.
+        e_olp-transactiondate   = el_card-datpag && el_card-zcputm.
+      ENDIF.
+
+      READ TABLE it_pdf INTO DATA(el_pdf)
+        WITH TABLE KEY vbeln = COND vbeln_vf( WHEN e_olp-type = 'DC' THEN e_olp-number
+                                              WHEN e_olp-billingnumber IS INITIAL THEN e_olp-assignmentnumber
+                                              ELSE e_olp-billingnumber ).
+
+      IF sy-subrc IS INITIAL AND e_olp-installment EQ c_001.
+        e_olp-pdf = el_pdf-string_pdf.
+      ENDIF.
+
+      APPEND e_olp TO t_olp.
+
+      IF vl_tabix EQ 250.
+        vl_process         = vl_process + 1.
+        el_process-process = vl_process.
+        el_process-t_olp[] = t_olp[].
+        APPEND el_process TO tl_process.
+        CLEAR vl_tabix.
+        REFRESH t_olp.
+      ENDIF.
+
+    ENDLOOP.
+
+    IF NOT vl_tabix IS INITIAL.
+      vl_process         = vl_process + 1.
+      el_process-process = vl_process.
+      el_process-t_olp[] = t_olp[].
+      APPEND el_process TO tl_process.
+      CLEAR vl_tabix.
+      REFRESH t_olp.
+    ENDIF.
+
+    LOOP AT tl_process INTO el_process.
+      CLEAR e_web.
+
+      CALL TRANSFORMATION zgntfi016
+           OPTIONS xml_header = 'no'
+            SOURCE documents = el_process-t_olp[]
+              RESULT XML DATA(vl_xml).
+
+      CALL FUNCTION 'SCMS_BASE64_ENCODE_STR'
+        EXPORTING
+          input  = vl_xml
+        IMPORTING
+          output = e_web-payload.
+
+      e_web-type             = c_document.
+      e_web-payload_encoding = c_base64.
+
+
+      CALL FUNCTION 'ZGENCA010'
+        EXPORTING
+          i_tipo_con = 'R'
+        IMPORTING
+          r_rfcdest  = v_pi
+        EXCEPTIONS
+          not_found  = 1
+          OTHERS     = 2.
+
+      IF sy-subrc IS INITIAL.
+
+        CALL FUNCTION 'ZGNNFI016N' IN BACKGROUND TASK
+          DESTINATION v_pi
+          EXPORTING
+            i_web = e_web.
+
+        COMMIT WORK.
+
+      ELSE.
+        RAISE not_found.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+ENDCLASS.
